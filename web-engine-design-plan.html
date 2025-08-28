@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>web-engine-design-plan</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<h1
+id="godot-inspired-web-engine-design-and-planning-dom-based">Godot-Inspired
+Web Engine: Design and Planning (DOM-Based)</h1>
+<p>This document outlines the architecture and project structure for a
+2D game engine on the web, built on the principles of the Godot Engine.
+This plan specifically targets the <strong>DOM as the primary
+renderer</strong>, using HTML elements and CSS for visuals.</p>
+<h2 id="core-philosophy">1. Core Philosophy</h2>
+<p>The engine will be built on the following core Godot
+philosophies:</p>
+<ul>
+<li><strong>Scene-Based:</strong> Everything is a scene, which is a tree
+of nodes. The scene tree maps directly to the DOM tree.</li>
+<li><strong>Node-Based Composition:</strong> Functionality is built by
+composing <code>Node</code> objects. Each <code>Node</code> will be a
+JavaScript class that manages a corresponding
+<code>HTMLElement</code>.</li>
+<li><strong>Decoupled Communication:</strong> Nodes will use signals
+(<code>EventEmitter</code>) to communicate without creating hard
+dependencies.</li>
+<li><strong>Centralized Managers (Servers):</strong> Global singleton
+managers will handle loading, input, and scene management, keeping the
+node logic clean.</li>
+<li><strong>Data-Driven:</strong> Scenes and resources will be defined
+in simple data files (JSON), separate from the game logic.</li>
+</ul>
+<h2 id="project-file-structure">2. Project File Structure</h2>
+<p>The file structure remains the same. The key difference is the
+<em>content</em> of the node classes.</p>
+<pre><code>/my-web-engine/
+|-- dist/
+|-- public/
+|   |-- assets/
+|   |-- index.html
+|   |-- style.css
+|-- src/
+|   |-- game/
+|   |   |-- scenes/
+|   |   |   `-- main.scene.json
+|   |   `-- scripts/
+|   |       `-- PlayerController.js
+|   |-- engine/
+|   |   |-- core/
+|   |   |   |-- Object.js
+|   |   |   |-- Node.js
+|   |   |   `-- MainLoop.js
+|   |   |-- managers/
+|   |   |   |-- ResourceManager.js
+|   |   |   |-- InputManager.js
+|   |   |   `-- SceneManager.js
+|   |   `-- nodes/
+|   |       |-- Node2D.js
+|   |       |-- Sprite.js       # Renamed from Sprite2D
+|   |       `-- Label.js
+|   |-- main.js
+|-- package.json
+`-- vite.config.js</code></pre>
+<h2 id="core-class-breakdown-dom-based">3. Core Class Breakdown
+(DOM-Based)</h2>
+<h3 id="node.js"><code>Node.js</code></h3>
+<ul>
+<li><strong>Responsibility:</strong> To be the base class for all
+objects in the scene tree. It will now create and manage an
+<code>HTMLElement</code>.</li>
+<li><strong>API:</strong>
+<ul>
+<li><code>element</code>: The <code>HTMLElement</code> this node manages
+(e.g., a <code>&lt;div&gt;</code>).</li>
+<li><code>constructor(element_type = 'div')</code>: Creates the DOM
+element.</li>
+<li><code>addChild(node)</code>: Appends the child node’s
+<code>element</code> to its own <code>element</code>.</li>
+<li><code>removeChild(node)</code>: Removes the child node’s
+<code>element</code>.</li>
+<li><code>_process(delta)</code>: The logic update, to be
+overridden.</li>
+<li><code>_render()</code>: A new lifecycle method called after
+<code>_process</code>, responsible for applying state to the DOM
+element’s style.</li>
+</ul></li>
+</ul>
+<h3 id="node2d.js-inherits-from-node"><code>Node2D.js</code> (inherits
+from <code>Node</code>)</h3>
+<ul>
+<li><strong>Responsibility:</strong> A node with 2D spatial
+properties.</li>
+<li><strong>API:</strong>
+<ul>
+<li><code>position = {x: 0, y: 0}</code></li>
+<li><code>rotation = 0</code> (in radians)</li>
+<li><code>scale = {x: 1, y: 1}</code></li>
+</ul></li>
+<li><strong>Interaction:</strong> Its <code>_render()</code> method will
+apply its position, rotation, and scale to its
+<code>element.style.transform</code>.</li>
+</ul>
+<h3 id="sprite.js-inherits-from-node2d"><code>Sprite.js</code> (inherits
+from <code>Node2D</code>)</h3>
+<ul>
+<li><strong>Responsibility:</strong> To display an image.</li>
+<li><strong>Interaction:</strong> It will be constructed with an
+<code>&lt;img&gt;</code> element instead of a <code>&lt;div&gt;</code>.
+It will have a <code>texture</code> property that, when set, updates the
+<code>element.src</code> attribute.</li>
+</ul>
+<h3 id="label.js-inherits-from-node2d"><code>Label.js</code> (inherits
+from <code>Node2D</code>)</h3>
+<ul>
+<li><strong>Responsibility:</strong> To display text.</li>
+<li><strong>Interaction:</strong> It will manage a
+<code>&lt;div&gt;</code> or <code>&lt;p&gt;</code> element. A
+<code>text</code> property will update the
+<code>element.textContent</code>.</li>
+</ul>
+<h3 id="the-render-step-no-renderer-class">The Render Step (No
+<code>Renderer</code> class)</h3>
+<p>We no longer need a dedicated <code>Renderer</code> class that draws
+to a canvas. <strong>The browser is our renderer.</strong> The “render
+step” is now the process of synchronizing our node state with the DOM.
+This will be handled by the new <code>_render()</code> lifecycle method
+on each node.</p>
+<h2 id="data-flow-plan-dom-based">4. Data Flow Plan (DOM-Based)</h2>
+<h3 id="a.-application-start-up">A. Application Start-Up</h3>
+<ol type="1">
+<li><code>main.js</code> is executed.</li>
+<li>The <code>Engine</code> object is created, instantiating the
+singleton managers.</li>
+<li><code>engine.start("path/to/main.scene.json")</code> is called.</li>
+<li><code>SceneManager</code> uses <code>ResourceManager</code> to fetch
+the scene JSON.</li>
+<li><code>SceneManager</code> recursively builds the node tree. For each
+node definition in the JSON:
+<ol type="a">
+<li>It creates an instance of the specified JS class (e.g.,
+<code>new Sprite()</code>).</li>
+<li>This in turn creates an <code>HTMLElement</code> (e.g.,
+<code>&lt;img&gt;</code>).</li>
+<li>The element is appended to the parent’s element in the DOM.</li>
+</ol></li>
+<li><code>_enterTree()</code> and <code>_ready()</code> are called on
+all nodes.</li>
+<li>The <code>MainLoop</code> is started.</li>
+</ol>
+<h3 id="b.-a-single-game-frame">B. A Single Game Frame</h3>
+<ol type="1">
+<li><code>MainLoop._update()</code> is called by the browser.</li>
+<li><code>Time</code> manager updates <code>delta</code> time.</li>
+<li><code>InputManager</code> is updated.</li>
+<li>The fixed physics step is executed (if applicable, likely using a
+3rd party library).</li>
+<li><code>SceneManager.update(delta)</code> is called, which iterates
+through the scene tree and calls <code>_process(delta)</code> on every
+node.
+<ul>
+<li>A <code>PlayerController</code> script reads from
+<code>InputManager</code> and updates its parent <code>Node2D</code>’s
+<code>position</code> property.</li>
+<li>The <code>position</code> property is just a variable in a JS
+object; <strong>no DOM interaction happens here.</strong></li>
+</ul></li>
+<li>After the <code>_process</code> pass is complete,
+<code>SceneManager.render()</code> is called. This iterates through the
+tree and calls <code>_render()</code> on every node.
+<ul>
+<li>The <code>Player</code> node’s <code>_render()</code> method reads
+its final <code>position</code>, <code>rotation</code>, etc., and
+updates its <code>element.style.transform</code> property.</li>
+<li>This batching of all DOM reads (<code>_process</code>) followed by
+all DOM writes (<code>_render</code>) is more efficient and helps avoid
+unnecessary browser layout recalculations.</li>
+</ul></li>
+<li><code>InputManager.endOfFrame()</code> is called.</li>
+<li>The browser paints the updated DOM. The loop repeats.</li>
+</ol>
+</body>
+</html>
