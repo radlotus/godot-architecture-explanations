@@ -1,0 +1,170 @@
+<h1
+id="godots-editor-architecture-the-engines-first-application">Godot’s
+Editor Architecture: The Engine’s First Application</h1>
+<p>This document explains the architecture of the Godot Editor itself.
+Understanding how the editor is built is the final step in grasping the
+engine’s cohesive design, as the editor is the ultimate example of all
+the core systems working together.</p>
+<h2 id="the-core-principle-the-editor-is-a-godot-game">The Core
+Principle: The Editor Is a Godot Game</h2>
+<p>The single most important concept to understand is that the Godot
+Editor is <strong>not</strong> a separate application built with a
+traditional UI toolkit like Qt or wxWidgets. <strong>The editor is a
+complex Godot application, built with the Godot engine
+itself.</strong></p>
+<ul>
+<li><strong>“Dogfooding”:</strong> This practice of using your own
+product to develop your product is often called “dogfooding.” It serves
+as the ultimate proof of the engine’s capability and flexibility.</li>
+<li><strong>Entry Point:</strong> When you launch the engine with the
+<code>--editor</code> flag, it doesn’t load your game’s main scene.
+Instead, it loads its own internal scene whose root node is
+<code>EditorNode</code> (<code>editor/editor_node.h</code>).</li>
+<li><strong>UI System:</strong> Every panel, button, tree, and inspector
+you see in the editor is a standard Godot <code>Control</code> node. The
+editor is built using the same UI system you use to make your
+games.</li>
+</ul>
+<hr />
+<h2 id="how-the-editor-uses-the-engines-systems">How the Editor Uses the
+Engine’s Systems</h2>
+<p>The editor is a masterclass in using the core architectural patterns
+we’ve discussed.</p>
+<h3 id="editornode-and-the-scene-tree"><code>EditorNode</code> and the
+Scene Tree</h3>
+<p><code>EditorNode</code> is the root of the editor’s scene tree. In
+its <code>_ready()</code> function, it programmatically creates and adds
+all the main UI components as children:</p>
+<ul>
+<li>A main <code>VBoxContainer</code> to structure the layout.</li>
+<li>A <code>MenuBar</code> for the top menu (<code>Scene</code>,
+<code>Project</code>, etc.).</li>
+<li>An <code>HSplitContainer</code> to separate the main viewport from
+the side docks.</li>
+<li>The various docks (<code>SceneTreeDock</code>,
+<code>FileSystemDock</code>, <code>InspectorDock</code>) are all custom
+<code>PanelContainer</code> nodes.</li>
+</ul>
+<h3 id="the-inspector-classdb-in-action">The Inspector:
+<code>ClassDB</code> in Action</h3>
+<p>The Inspector is the most powerful example of Godot’s reflection
+system.</p>
+<ol type="1">
+<li><strong>Signal:</strong> When you click a node in the
+<code>SceneTreeDock</code>, it emits a <code>node_selected</code>
+signal.</li>
+<li><strong>Connection:</strong> The <code>EditorInspector</code> is
+connected to this signal.</li>
+<li><strong>Reflection:</strong> The <code>EditorInspector</code>
+receives the selected node and immediately queries it for its properties
+using <code>node-&gt;get_property_list()</code>. This method gets all
+the registered properties for that node’s class from
+<code>ClassDB</code>.</li>
+<li><strong>Dynamic UI Generation:</strong> The
+<code>EditorInspector</code> iterates through this list of properties.
+For each property, it creates a new <code>EditorProperty</code> node
+(e.g., <code>EditorPropertyText</code>,
+<code>EditorPropertyColor</code>) and adds it as a child. It uses the
+<code>PropertyInfo</code> (type, hints) from <code>ClassDB</code> to
+decide which kind of control to create.</li>
+<li><strong>Applying Changes:</strong> When you change a value in an
+<code>EditorProperty</code> control, it emits a
+<code>property_changed</code> signal. The <code>EditorInspector</code>
+catches this and calls
+<code>node-&gt;set("property_name", new_value)</code> on the original
+node, which again uses <code>ClassDB</code> to find the correct C++
+setter function.</li>
+</ol>
+<h3 id="the-docks-visualizing-engine-state">The Docks: Visualizing
+Engine State</h3>
+<ul>
+<li><strong>Scene Tree Dock:</strong> This is a <code>Tree</code>
+control node that directly visualizes the game’s <code>SceneTree</code>.
+It listens to the main <code>SceneTree</code>’s <code>node_added</code>,
+<code>node_removed</code>, and <code>node_renamed</code> signals to keep
+its display perfectly in sync at all times.</li>
+<li><strong>FileSystem Dock:</strong> This is a sophisticated UI that
+interacts directly with the <code>ResourceLoader</code>,
+<code>ResourceSaver</code>, and the <code>ResourceImporter</code>
+system. When you double-click a file, it tells the editor to either open
+it in the appropriate workspace (like a script or a scene) or shows its
+import options.</li>
+<li><strong>The Main Viewport:</strong> The central 3D/2D view where you
+edit your scene is a <code>SubViewportContainer</code> node. This allows
+the editor to render your game world inside its own UI, and to draw
+editor-only elements like gizmos and selection boxes on top of it.</li>
+</ul>
+<h3 id="editorplugin-extending-the-editor"><code>EditorPlugin</code>:
+Extending the Editor</h3>
+<p>Because the editor is a Godot application, it is highly extensible.
+By creating a script that inherits from <code>EditorPlugin</code>, you
+can get direct access to the editor’s scene tree and add your own
+functionality:</p>
+<ul>
+<li>Add new docks and panels.</li>
+<li>Create custom <code>EditorInspector</code> plugins for your
+nodes.</li>
+<li>Add custom 3D gizmos.</li>
+<li>Define new <code>ResourceImporter</code>s for custom asset
+types.</li>
+</ul>
+<hr />
+<h2 id="translating-this-to-a-web-based-editor">Translating This to a
+Web-Based Editor</h2>
+<p>Building a web-based editor for your engine is the ultimate goal that
+ties all our previous plans together. The strategy is the same as
+Godot’s: <strong>build the editor using the engine itself.</strong></p>
+<ol type="1">
+<li><p><strong>Create an Editor Entry Point:</strong> Create an
+<code>editor.html</code> and <code>editor.js</code>. This entry point
+will initialize your <code>Engine</code> class, but instead of loading a
+game scene, it will instantiate and run an <code>EditorNode</code>
+class.</p></li>
+<li><p><strong>Build the UI with Your Components:</strong> Your
+<code>EditorNode</code> will build the editor’s UI using the same
+DOM-based <code>Node</code> components (<code>Panel</code>,
+<code>TreeControl</code>, <code>Button</code>) that you designed for
+your game engine.</p></li>
+<li><p><strong>Implement the Inspector:</strong></p>
+<ul>
+<li>Create an <code>InspectorPanel</code> component.</li>
+<li>When an object is selected, the <code>InspectorPanel</code> will use
+your <code>ClassDB</code>-like system
+(<code>MyComponent.getProperties()</code>) to get a list of property
+metadata.</li>
+<li>It will dynamically generate HTML <code>&lt;div&gt;</code>s,
+<code>&lt;label&gt;</code>s, and <code>&lt;input&gt;</code>s for each
+property.</li>
+<li>It will use standard DOM event listeners
+(<code>input.onchange = ...</code>) to update the properties on the
+target object.</li>
+</ul></li>
+<li><p><strong>Implement the Scene Tree View:</strong></p>
+<ul>
+<li>Create a <code>SceneTreeView</code> component.</li>
+<li>It will listen for signals from your <code>SceneManager</code>
+(<code>nodeAdded</code>, <code>nodeRemoved</code>).</li>
+<li>When the scene changes, it will re-render its contents, building a
+<code>&lt;ul&gt;</code> list that reflects the game’s node
+hierarchy.</li>
+</ul></li>
+<li><p><strong>Implement the Viewport:</strong></p>
+<ul>
+<li>The main content area can be an <code>&lt;iframe&gt;</code> that
+points to your <code>index.html</code> (the “game” view), providing
+strong isolation. Alternatively, it can be a <code>&lt;div&gt;</code>
+where you mount the game’s root DOM element directly.</li>
+</ul></li>
+<li><p><strong>Implement Serialization:</strong></p>
+<ul>
+<li>A “Save” button in your editor’s UI will trigger a function that
+traverses your game’s <code>Node</code> tree.</li>
+<li>This function will use your <code>ClassDB</code> to get default
+values and will generate a clean JSON string representing the scene and
+its modified properties.</li>
+<li>This JSON can then be downloaded or sent to a server.</li>
+</ul></li>
+</ol>
+<p>By following this plan, you are not just building a game; you are
+building a <strong>tool for creating games</strong>. This is the final
+and most powerful lesson from Godot’s architecture.</p>

@@ -1,0 +1,204 @@
+<h1 id="godots-main-loop-architecture">Godot’s Main Loop
+Architecture</h1>
+<p>This document explains Godot’s main loop, the central heartbeat of
+any Godot application. Understanding its architecture is key to managing
+game logic, physics, and input correctly. We will also explore how to
+replicate this proven pattern for web applications.</p>
+<h2 id="core-principles">Core Principles</h2>
+<p>The main loop’s purpose is to update and render the application frame
+by frame, as fast as possible. Godot’s loop is designed with three key
+principles:</p>
+<ol type="1">
+<li><strong>Predictable Phasing:</strong> Each frame is broken down into
+a sequence of distinct phases (input, process, physics, render). This
+ensures that operations happen in a reliable and predictable order.</li>
+<li><strong>Decoupling of Logic and Physics:</strong> Game logic (which
+can run at a variable frame rate) is explicitly separated from physics
+calculations (which must run at a fixed, constant interval) to ensure
+stability and determinism.</li>
+<li><strong>Centralized Management, Distributed Execution:</strong> A
+central <code>MainLoop</code> object (by default, the
+<code>SceneTree</code>) manages the loop, but it dispatches the
+execution of logic to the individual <code>Node</code> objects in the
+scene tree (<code>_process</code>, <code>_physics_process</code>,
+etc.).</li>
+</ol>
+<hr />
+<h2 id="the-architectural-building-blocks">The Architectural Building
+Blocks</h2>
+<p>The main loop is initiated by <code>Main::start()</code> and is
+managed by an implementation of the <code>MainLoop</code> class
+(<code>core/os/main_loop.h</code>), which by default is the
+<code>SceneTree</code>.</p>
+<h3 id="the-phases-of-a-single-frame">The Phases of a Single Frame</h3>
+<p>Here is the journey of a single frame through the Godot engine:</p>
+<h4 id="input-phase">1. Input Phase</h4>
+<p>At the very beginning of the frame, the engine polls the operating
+system for all user input (keyboard, mouse, gamepad, etc.).</p>
+<ul>
+<li>The <code>DisplayServer</code> receives these raw inputs.</li>
+<li>They are converted into <code>InputEvent</code> objects.</li>
+<li>The <code>SceneTree</code> then propagates these events down the
+node tree in a specific order:
+<ol type="1">
+<li><strong><code>_input(event)</code>:</strong> Sent to all nodes. The
+first node to <code>accept_event()</code> stops the propagation.</li>
+<li><strong><code>_gui_input(event)</code>:</strong> If the input wasn’t
+accepted, it is sent to <code>Control</code> nodes, starting from the
+one under the mouse and moving up the tree.</li>
+<li><strong><code>_unhandled_input(event)</code>:</strong> If the input
+is <em>still</em> not handled, it is sent to all nodes again, allowing
+systems further down the line (like a pause menu) to respond.</li>
+</ol></li>
+</ul>
+<h4 id="process-game-logic-phase">2. Process (Game Logic) Phase</h4>
+<p>This phase is for all general game logic that needs to run every
+frame. It is not tied to the physics simulation.</p>
+<ul>
+<li>The <code>SceneTree</code> iterates through every node in the
+tree.</li>
+<li>If a node has <code>_process(delta)</code> implemented and enabled,
+that method is called.</li>
+<li><strong><code>delta</code>:</strong> This crucial parameter contains
+the time elapsed (in seconds) since the last process frame. You
+<strong>must</strong> use <code>delta</code> when modifying properties
+like position or rotation to ensure your game runs at the same speed on
+all hardware, regardless of frame rate.
+(<code>position += speed * delta</code>)</li>
+</ul>
+<h4 id="physics-process-phase">3. Physics Process Phase</h4>
+<p>This phase is for all physics-related logic. It is designed to be
+completely deterministic.</p>
+<ul>
+<li>The physics process runs at a <strong>fixed interval</strong> (e.g.,
+60 times per second by default), independent of the visual frame
+rate.</li>
+<li>The <code>SceneTree</code> calls
+<code>_physics_process(delta)</code> on all nodes that have it
+implemented and enabled.</li>
+<li><strong><code>delta</code>:</strong> In this context,
+<code>delta</code> is a constant value (e.g., <code>1/60</code>).</li>
+<li><strong>Synchronization:</strong> If the visual frame rate is higher
+than the physics rate, the physics phase may not run on every frame. If
+the visual frame rate drops, the engine will run the physics phase
+<strong>multiple times</strong> in a single frame to “catch up” and keep
+the simulation in sync with real-time. This is why all physics-related
+code <strong>must</strong> be in <code>_physics_process</code>.</li>
+<li>During this phase, the <code>PhysicsServer</code> steps the
+simulation forward.</li>
+</ul>
+<h4 id="rendering-phase">4. Rendering Phase</h4>
+<p>After all the logic and physics updates are complete, the engine
+renders the new state of the world.</p>
+<ul>
+<li>The <code>SceneTree</code> triggers the <code>RenderingServer</code>
+to draw the frame.</li>
+<li>The <code>RenderingServer</code> processes the draw commands that
+all visible nodes (like <code>Sprite2D</code> or
+<code>MeshInstance3D</code>) have queued.</li>
+<li>The final image is sent to the GPU and displayed on the screen.</li>
+</ul>
+<hr />
+<h2 id="translating-the-main-loop-to-the-dom">Translating the Main Loop
+to the DOM</h2>
+<p>You can implement this robust, time-tested loop architecture in
+JavaScript for your web applications.</p>
+<h3 id="the-main-loop-requestanimationframe">The Main Loop:
+<code>requestAnimationFrame</code></h3>
+<p>The browser’s <code>requestAnimationFrame(callback)</code> is the
+modern and efficient way to create a game loop. The browser calls your
+<code>callback</code> function just before the next repaint.</p>
+<h3 id="the-fixed-step-physics-loop">The Fixed-Step Physics Loop</h3>
+<p>The most important part to replicate is the decoupling of physics
+from rendering. This is achieved with a classic fixed-timestep
+implementation inside your <code>requestAnimationFrame</code>
+callback.</p>
+<p>Here is a complete example of a web-based game loop:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> GameLoop {</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">constructor</span>() {</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">lastTime</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">accumulator</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">physicsTimestep</span> <span class="op">=</span> <span class="dv">1</span> <span class="op">/</span> <span class="dv">60</span><span class="op">;</span> <span class="co">// Run physics 60 times per second</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Bind the main loop function to this instance</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">mainLoop</span> <span class="op">=</span> <span class="kw">this</span><span class="op">.</span><span class="at">mainLoop</span><span class="op">.</span><span class="fu">bind</span>(<span class="kw">this</span>)<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>  <span class="co">// Corresponds to Godot&#39;s _process(delta)</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  <span class="bu">process</span>(deltaTime) {</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// All your variable-rate game logic goes here</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// e.g., update animations, check for game state changes</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="bu">console</span><span class="op">.</span><span class="fu">log</span>(<span class="vs">`Process frame, delta: </span><span class="sc">${</span>deltaTime<span class="sc">}</span><span class="vs">`</span>)<span class="op">;</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>  <span class="co">// Corresponds to Godot&#39;s _physics_process(delta)</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">physicsProcess</span>() {</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="co">// All your physics and movement logic goes here</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// e.g., apply forces, check for collisions</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="co">// The delta is fixed, so you don&#39;t need to pass it.</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="co">// console.log(&quot;Physics tick!&quot;);</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>  <span class="co">// Corresponds to the Rendering phase</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>  <span class="fu">render</span>() {</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Apply the state to the DOM</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="co">// e.g., update element.style.transform, change text content</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>  <span class="co">// The main loop function called by the browser</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mainLoop</span>(currentTime) {</span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Calculate deltaTime in seconds</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>    <span class="kw">const</span> deltaTime <span class="op">=</span> (currentTime <span class="op">-</span> <span class="kw">this</span><span class="op">.</span><span class="at">lastTime</span>) <span class="op">/</span> <span class="dv">1000</span><span class="op">;</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">lastTime</span> <span class="op">=</span> currentTime<span class="op">;</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    <span class="co">// --- Physics Phase ---</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">accumulator</span> <span class="op">+=</span> deltaTime<span class="op">;</span></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Run the physics loop to catch up, if necessary</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> (<span class="kw">this</span><span class="op">.</span><span class="at">accumulator</span> <span class="op">&gt;=</span> <span class="kw">this</span><span class="op">.</span><span class="at">physicsTimestep</span>) {</span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>      <span class="kw">this</span><span class="op">.</span><span class="fu">physicsProcess</span>()<span class="op">;</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>      <span class="kw">this</span><span class="op">.</span><span class="at">accumulator</span> <span class="op">-=</span> <span class="kw">this</span><span class="op">.</span><span class="at">physicsTimestep</span><span class="op">;</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>    <span class="co">// --- Process (Game Logic) Phase ---</span></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="fu">process</span>(deltaTime)<span class="op">;</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>    <span class="co">// --- Rendering Phase ---</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="fu">render</span>()<span class="op">;</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Request the next frame</span></span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>    <span class="fu">requestAnimationFrame</span>(<span class="kw">this</span><span class="op">.</span><span class="at">mainLoop</span>)<span class="op">;</span></span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>  <span class="fu">start</span>() {</span>
+<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Set the initial time and start the loop</span></span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">lastTime</span> <span class="op">=</span> <span class="bu">performance</span><span class="op">.</span><span class="fu">now</span>()<span class="op">;</span></span>
+<span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a>    <span class="fu">requestAnimationFrame</span>(<span class="kw">this</span><span class="op">.</span><span class="at">mainLoop</span>)<span class="op">;</span></span>
+<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a><span class="co">// --- How to use it ---</span></span>
+<span id="cb1-66"><a href="#cb1-66" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> myGame <span class="op">=</span> <span class="kw">new</span> <span class="fu">GameLoop</span>()<span class="op">;</span></span>
+<span id="cb1-67"><a href="#cb1-67" aria-hidden="true" tabindex="-1"></a>myGame<span class="op">.</span><span class="fu">start</span>()<span class="op">;</span></span></code></pre></div>
+<h3 id="handling-input">Handling Input</h3>
+<p>Unlike Godot, which polls for input at the start of the frame,
+browser input is asynchronous and event-driven.</p>
+<ol type="1">
+<li><strong>Create an Input Manager:</strong> Create a simple JavaScript
+object to hold the current state of inputs (e.g.,
+<code>Input.keys = {}</code>,
+<code>Input.mousePosition = {x: 0, y: 0}</code>).</li>
+<li><strong>Add Event Listeners:</strong> Attach event listeners
+(<code>keydown</code>, <code>keyup</code>, <code>pointermove</code>,
+etc.) to the <code>window</code> or your main game
+<code>div</code>.</li>
+<li><strong>Update State:</strong> In your event listeners, update the
+state of your <code>Input</code> manager object.</li>
+<li><strong>Poll State in Logic:</strong> In your <code>process</code>
+and <code>physicsProcess</code> methods, you can now check the state of
+the <code>Input</code> object (e.g.,
+<code>if (Input.keys['ArrowUp']) { ... }</code>). This mimics how
+Godot’s <code>Input.is_action_pressed()</code> works.</li>
+</ol>

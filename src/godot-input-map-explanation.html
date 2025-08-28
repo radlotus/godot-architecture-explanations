@@ -1,0 +1,191 @@
+<h1 id="godots-input-map-and-action-system">Godot’s Input Map and Action
+System</h1>
+<p>This document explains Godot’s Input Map system, a simple but
+powerful feature that decouples raw hardware inputs from the game’s
+logic. Adopting this pattern is one of the most important best practices
+for creating games with flexible and user-configurable controls.</p>
+<h2 id="core-principles">Core Principles</h2>
+<ol type="1">
+<li><strong>Abstract Actions, Not Raw Keys:</strong> Instead of writing
+code that checks for a specific key like <code>Spacebar</code>, you
+check for an abstract action like <code>"jump"</code>. This makes your
+code cleaner and more readable.</li>
+<li><strong>Decoupling:</strong> Your game logic for jumping does not
+need to know what button or key triggers it. This means the control
+scheme can be changed at any time without ever touching the game logic
+code.</li>
+<li><strong>Flexibility:</strong> Multiple different inputs can be
+mapped to the same action. For example, <code>"jump"</code> can be
+triggered by the <code>Spacebar</code>, an Xbox controller’s
+<code>A</code> button, and a PlayStation controller’s <code>X</code>
+button simultaneously.</li>
+<li><strong>Centralized Configuration:</strong> All input mappings are
+defined in one central place (the Project Settings -&gt; Input Map),
+making them easy to view, edit, and manage.</li>
+</ol>
+<hr />
+<h2 id="the-architectural-building-blocks">The Architectural Building
+Blocks</h2>
+<p>The system is composed of two key singletons:</p>
+<ul>
+<li><strong><code>InputMap</code>:</strong> The “database” that stores
+the configuration.</li>
+<li><strong><code>Input</code>:</strong> The public-facing “API” that
+your game code uses to query the input state.</li>
+</ul>
+<h3 id="the-inputmap-singleton">The <code>InputMap</code> Singleton</h3>
+<p>The <code>InputMap</code> (<code>core/input/input_map.h</code>) is a
+singleton whose sole job is to store the mapping between action names
+and the raw input events associated with them.</p>
+<ul>
+<li><strong>The Data Structure:</strong> It primarily consists of a
+<code>HashMap</code> where the keys are the action names (as
+<code>StringName</code>s) and the values are <code>Action</code>
+structs.</li>
+<li><strong>The <code>Action</code> Struct:</strong> Each
+<code>Action</code> struct contains a list of all the
+<code>InputEvent</code> objects that can trigger it. For example, the
+<code>"jump"</code> action’s list might contain an
+<code>InputEventKey</code> for the spacebar and an
+<code>InputEventJoypadButton</code> for a controller button.</li>
+<li><strong>Loading:</strong> When the engine starts, the
+<code>InputMap</code> singleton reads the <code>input/*</code> sections
+of the <code>project.godot</code> file and populates its internal
+HashMap with all the configured actions.</li>
+</ul>
+<h3 id="the-input-singleton">The <code>Input</code> Singleton</h3>
+<p>This is the singleton that your game code will interact with 99% of
+the time. The <code>Input</code> singleton
+(<code>core/input/input.h</code>) is responsible for processing live
+input and providing a clean, simple API for querying action states.</p>
+<p><strong>The Process:</strong></p>
+<ol type="1">
+<li>In the main loop, the <code>DisplayServer</code> receives a raw
+input event (e.g., “the ‘D’ key was pressed”).</li>
+<li>This event is passed to the <code>Input</code> singleton’s internal
+<code>_parse_input_event</code> method.</li>
+<li>The <code>Input</code> singleton asks the <code>InputMap</code>:
+“Does this ‘D’ key event correspond to any action?”</li>
+<li><code>InputMap</code> looks through its data and finds that the ‘D’
+key is part of the <code>"move_right"</code> action.</li>
+<li>The <code>Input</code> singleton then updates its own internal
+state, marking the <code>"move_right"</code> action as currently
+<code>pressed</code>.</li>
+</ol>
+<p><strong>The Public API:</strong></p>
+<p>Your game logic in <code>_process</code> or
+<code>_physics_process</code> then uses simple, clean methods to read
+this state:</p>
+<ul>
+<li><code>Input.is_action_pressed("move_right")</code>: Returns
+<code>true</code> every frame the action is held down.</li>
+<li><code>Input.is_action_just_pressed("jump")</code>: Returns
+<code>true</code> only on the single frame the action was first
+pressed.</li>
+<li><code>Input.is_action_just_released("shoot")</code>: Returns
+<code>true</code> only on the single frame the action was released.</li>
+<li><code>Input.get_axis("move_left", "move_right")</code>: A special
+helper that treats two opposing actions as a virtual analog stick,
+returning a value from -1.0 to 1.0. This is extremely useful for
+movement.</li>
+</ul>
+<p>This design cleanly separates the complex mapping and configuration
+(<code>InputMap</code>) from the simple state querying
+(<code>Input</code>) that the game logic needs.</p>
+<hr />
+<h2 id="translating-the-input-map-to-the-web">Translating the Input Map
+to the Web</h2>
+<p>This is a highly recommended pattern for any web-based game or
+interactive application. It is straightforward to implement.</p>
+<h3 id="define-your-input-map">1. Define Your Input Map</h3>
+<p>Create a simple JavaScript object to act as your configuration file.
+This is the equivalent of Godot’s <code>project.godot</code> input
+section.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> inputMap <span class="op">=</span> {</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;jump&quot;</span><span class="op">:</span> { <span class="dt">events</span><span class="op">:</span> [<span class="st">&quot;Space&quot;</span><span class="op">,</span> <span class="st">&quot;KeyX&quot;</span><span class="op">,</span> <span class="st">&quot;GamepadFaceBottom&quot;</span>] }<span class="op">,</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;shoot&quot;</span><span class="op">:</span> { <span class="dt">events</span><span class="op">:</span> [<span class="st">&quot;KeyC&quot;</span><span class="op">,</span> <span class="st">&quot;GamepadFaceRight&quot;</span>] }<span class="op">,</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;move_left&quot;</span><span class="op">:</span> { <span class="dt">events</span><span class="op">:</span> [<span class="st">&quot;KeyA&quot;</span><span class="op">,</span> <span class="st">&quot;ArrowLeft&quot;</span>]<span class="op">,</span> <span class="dt">axis</span><span class="op">:</span> <span class="op">-</span><span class="dv">1</span> }<span class="op">,</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;move_right&quot;</span><span class="op">:</span> { <span class="dt">events</span><span class="op">:</span> [<span class="st">&quot;KeyD&quot;</span><span class="op">,</span> <span class="st">&quot;ArrowRight&quot;</span>]<span class="op">,</span> <span class="dt">axis</span><span class="op">:</span> <span class="dv">1</span> }<span class="op">,</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;move_up&quot;</span><span class="op">:</span> { <span class="dt">events</span><span class="op">:</span> [<span class="st">&quot;KeyW&quot;</span><span class="op">,</span> <span class="st">&quot;ArrowUp&quot;</span>]<span class="op">,</span> <span class="dt">axis</span><span class="op">:</span> <span class="op">-</span><span class="dv">1</span> }<span class="op">,</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;move_down&quot;</span><span class="op">:</span> { <span class="dt">events</span><span class="op">:</span> [<span class="st">&quot;KeyS&quot;</span><span class="op">,</span> <span class="st">&quot;ArrowDown&quot;</span>]<span class="op">,</span> <span class="dt">axis</span><span class="op">:</span> <span class="dv">1</span> }</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>}<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">// We use KeyboardEvent.code values for keys.</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="co">// We use custom names for gamepad buttons for clarity.</span></span></code></pre></div>
+<h3 id="create-the-input-manager">2. Create the <code>Input</code>
+Manager</h3>
+<p>Create a singleton class that will manage input state and provide the
+public API.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> InputManager {</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">constructor</span>(map) {</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">map</span> <span class="op">=</span> map<span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Internal state for actions</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">actions</span> <span class="op">=</span> {}<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Initialize all actions from the map</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> (<span class="kw">const</span> actionName <span class="kw">in</span> <span class="kw">this</span><span class="op">.</span><span class="at">map</span>) {</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>      <span class="kw">this</span><span class="op">.</span><span class="at">actions</span>[actionName] <span class="op">=</span> { <span class="dt">pressed</span><span class="op">:</span> <span class="kw">false</span><span class="op">,</span> <span class="dt">justPressed</span><span class="op">:</span> <span class="kw">false</span><span class="op">,</span> <span class="dt">justReleased</span><span class="op">:</span> <span class="kw">false</span> }<span class="op">;</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Listen for keyboard events</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">window</span><span class="op">.</span><span class="fu">addEventListener</span>(<span class="st">&#39;keydown&#39;</span><span class="op">,</span> (e) <span class="kw">=&gt;</span> <span class="kw">this</span><span class="op">.</span><span class="fu">_onKey</span>(e<span class="op">.</span><span class="at">code</span><span class="op">,</span> <span class="kw">true</span>))<span class="op">;</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="bu">window</span><span class="op">.</span><span class="fu">addEventListener</span>(<span class="st">&#39;keyup&#39;</span><span class="op">,</span> (e) <span class="kw">=&gt;</span> <span class="kw">this</span><span class="op">.</span><span class="fu">_onKey</span>(e<span class="op">.</span><span class="at">code</span><span class="op">,</span> <span class="kw">false</span>))<span class="op">;</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>  <span class="co">// Called internally when a key is pressed or released</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">_onKey</span>(code<span class="op">,</span> isPressed) {</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> (<span class="kw">const</span> actionName <span class="kw">in</span> <span class="kw">this</span><span class="op">.</span><span class="at">map</span>) {</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (<span class="kw">this</span><span class="op">.</span><span class="at">map</span>[actionName]<span class="op">.</span><span class="at">events</span><span class="op">.</span><span class="fu">includes</span>(code)) {</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>        <span class="kw">const</span> action <span class="op">=</span> <span class="kw">this</span><span class="op">.</span><span class="at">actions</span>[actionName]<span class="op">;</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> (action<span class="op">.</span><span class="at">pressed</span> <span class="op">!==</span> isPressed) { <span class="co">// State changed</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>          action<span class="op">.</span><span class="at">pressed</span> <span class="op">=</span> isPressed<span class="op">;</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>          <span class="cf">if</span> (isPressed) {</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>            action<span class="op">.</span><span class="at">justPressed</span> <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>          } <span class="cf">else</span> {</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>            action<span class="op">.</span><span class="at">justReleased</span> <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>          }</span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>  <span class="co">// This should be called at the end of each frame in your game loop</span></span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>  <span class="fu">endOfFrame</span>() {</span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> (<span class="kw">const</span> actionName <span class="kw">in</span> <span class="kw">this</span><span class="op">.</span><span class="at">actions</span>) {</span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>      <span class="kw">this</span><span class="op">.</span><span class="at">actions</span>[actionName]<span class="op">.</span><span class="at">justPressed</span> <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>      <span class="kw">this</span><span class="op">.</span><span class="at">actions</span>[actionName]<span class="op">.</span><span class="at">justReleased</span> <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>  <span class="co">// --- Public API ---</span></span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>  <span class="fu">isActionPressed</span>(actionName) {</span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">this</span><span class="op">.</span><span class="at">actions</span>[actionName]<span class="op">?.</span><span class="at">pressed</span> <span class="op">||</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>  <span class="fu">isActionJustPressed</span>(actionName) {</span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">this</span><span class="op">.</span><span class="at">actions</span>[actionName]<span class="op">?.</span><span class="at">justPressed</span> <span class="op">||</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>  <span class="fu">getAxis</span>(negativeAction<span class="op">,</span> positiveAction) {</span>
+<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a>    <span class="kw">let</span> axis <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="kw">this</span><span class="op">.</span><span class="fu">isActionPressed</span>(negativeAction)) {</span>
+<span id="cb2-55"><a href="#cb2-55" aria-hidden="true" tabindex="-1"></a>      axis <span class="op">+=</span> <span class="kw">this</span><span class="op">.</span><span class="at">map</span>[negativeAction]<span class="op">.</span><span class="at">axis</span> <span class="op">||</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
+<span id="cb2-56"><a href="#cb2-56" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb2-57"><a href="#cb2-57" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="kw">this</span><span class="op">.</span><span class="fu">isActionPressed</span>(positiveAction)) {</span>
+<span id="cb2-58"><a href="#cb2-58" aria-hidden="true" tabindex="-1"></a>      axis <span class="op">+=</span> <span class="kw">this</span><span class="op">.</span><span class="at">map</span>[positiveAction]<span class="op">.</span><span class="at">axis</span> <span class="op">||</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb2-59"><a href="#cb2-59" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb2-60"><a href="#cb2-60" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> axis<span class="op">;</span></span>
+<span id="cb2-61"><a href="#cb2-61" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-62"><a href="#cb2-62" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb2-63"><a href="#cb2-63" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-64"><a href="#cb2-64" aria-hidden="true" tabindex="-1"></a><span class="co">// Create the global singleton instance</span></span>
+<span id="cb2-65"><a href="#cb2-65" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> Input <span class="op">=</span> <span class="kw">new</span> <span class="fu">InputManager</span>(inputMap)<span class="op">;</span></span>
+<span id="cb2-66"><a href="#cb2-66" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-67"><a href="#cb2-67" aria-hidden="true" tabindex="-1"></a><span class="co">// In your main game loop, after all processing:</span></span>
+<span id="cb2-68"><a href="#cb2-68" aria-hidden="true" tabindex="-1"></a><span class="co">// requestAnimationFrame(gameLoop);</span></span>
+<span id="cb2-69"><a href="#cb2-69" aria-hidden="true" tabindex="-1"></a><span class="co">// function gameLoop() { ...; Input.endOfFrame(); }</span></span></code></pre></div>
+<p>This implementation provides the same decoupling and clean API as
+Godot’s system, making your web application’s input handling robust and
+easily configurable.</p>

@@ -1,0 +1,165 @@
+<h1 id="godots-viewport-system-architecture">Godot’s Viewport System
+Architecture</h1>
+<p>This document explains Godot’s powerful Viewport system. Viewports
+are one of the engine’s most unique and flexible features, acting as the
+bridge between your scene tree and the final rendered image. We will
+also explore how to architect similar features for web applications.</p>
+<h2 id="core-principles">Core Principles</h2>
+<ol type="1">
+<li><strong>A Viewport is a Window:</strong> At its core, a
+<code>Viewport</code> is a rectangular area that renders a view of its
+child nodes. The main game window itself is just a special “root”
+<code>Viewport</code>.</li>
+<li><strong>A Viewport is a World:</strong> Every <code>Viewport</code>
+creates its own independent 2D and 3D worlds. Nodes added as children to
+a <code>Viewport</code> exist and are rendered within that world,
+separate from the parent viewport’s world.</li>
+<li><strong>A Viewport is a Render Target:</strong> A
+<code>Viewport</code> can render its contents to an off-screen texture
+instead of directly to the screen. This texture can then be used
+anywhere else in your project, enabling a huge variety of advanced
+effects.</li>
+<li><strong>Cameras Control Viewports:</strong> A <code>Camera</code>
+node is a helper that, when added to a scene, finds its parent
+<code>Viewport</code> and controls its view (position, zoom, angle,
+etc.).</li>
+</ol>
+<hr />
+<h2 id="the-architectural-building-blocks">The Architectural Building
+Blocks</h2>
+<h3 id="the-viewport-node">The <code>Viewport</code> Node</h3>
+<p>The <code>Viewport</code> class (<code>scene/main/viewport.h</code>)
+is a <code>Node</code> that can be added anywhere in the scene tree. It
+provides a surface to render on.</p>
+<ul>
+<li><strong>The Root Viewport:</strong> When you run your game, Godot
+creates a root <code>Window</code> node, which is a special type of
+<code>Viewport</code>. This is the main game window.</li>
+<li><strong>Worlds:</strong> A <code>Viewport</code> owns a
+<code>World2D</code> and a <code>World3D</code>. Any <code>Node2D</code>
+or <code>Node3D</code> children will be part of this self-contained
+world.</li>
+<li><strong>Size:</strong> It has a <code>size</code> property that
+determines the resolution of its rendered output.</li>
+<li><strong>Render Target:</strong> The most powerful feature of a
+<code>Viewport</code> is its ability to act as a render target. You can
+get the result of its rendering at any time by calling
+<code>get_texture()</code>. This returns a <code>ViewportTexture</code>
+that you can immediately use in a sprite, a UI element, or as part of a
+material.</li>
+</ul>
+<h3 id="the-subviewport-node">The <code>SubViewport</code> Node</h3>
+<p>This is a helper node that makes it easier to manage viewports as
+render targets. When you add a <code>SubViewport</code> to your scene,
+it acts as an off-screen buffer. Its children are rendered to its
+internal texture, but it is not displayed on its own. To display it, you
+use a <code>SubViewportContainer</code>.</p>
+<h3 id="the-camera2d-and-camera3d-nodes">The <code>Camera2D</code> and
+<code>Camera3D</code> Nodes</h3>
+<p>A <code>Camera</code> (<code>scene/2d/camera_2d.h</code>,
+<code>scene/3d/camera_3d.h</code>) is a node that controls how a
+<code>Viewport</code> looks at its world.</p>
+<ul>
+<li>When you add a <code>Camera</code> to a <code>Viewport</code>’s
+scene tree and enable it, it becomes the active camera for that
+viewport.</li>
+<li>It overrides the viewport’s default view transform with its
+own.</li>
+<li><strong><code>Camera2D</code>:</strong> Controls the 2D view with
+properties like <code>position</code>, <code>zoom</code>, and
+<code>rotation</code>.</li>
+<li><strong><code>Camera3D</code>:</strong> Controls the 3D view with
+properties like <code>transform</code> (position/rotation),
+<code>projection</code> (perspective or orthographic), and
+<code>fov</code> (field of view).</li>
+</ul>
+<h3 id="common-use-cases">Common Use Cases</h3>
+<p>This architecture enables many advanced rendering techniques:</p>
+<ol type="1">
+<li><strong>Split-Screen Multiplayer:</strong> Create a main
+<code>HBoxContainer</code> and add two <code>SubViewportContainer</code>
+nodes to it. Each container displays a <code>SubViewport</code> with its
+own world and camera, rendering a different player’s view.</li>
+<li><strong>Picture-in-Picture:</strong> Render a 3D security camera’s
+view using a <code>SubViewport</code>, then display its texture on a
+<code>TextureRect</code> in your 2D UI to create a monitor effect.</li>
+<li><strong>Dynamic Character Portraits:</strong> Place a 3D character
+model and a <code>Camera3D</code> inside a <code>SubViewport</code>.
+This renders a 2D portrait of your character that you can use in your
+UI. If the character changes equipment, the portrait updates
+automatically.</li>
+<li><strong>Post-Processing Effects:</strong> Render your entire game
+scene inside one main <code>SubViewport</code>. Display that viewport’s
+texture on a full-screen rectangle and apply a custom shader to it to
+create effects like blur, bloom, or color grading.</li>
+</ol>
+<hr />
+<h2 id="translating-the-viewport-system-to-the-dom">Translating the
+Viewport System to the DOM</h2>
+<p>Replicating Godot’s viewport system requires different strategies
+depending on the complexity of the use case.</p>
+<h3 id="the-root-viewport-the-browser-window">The Root Viewport: The
+Browser Window</h3>
+<p>This is a direct analogy. The browser window is your root viewport,
+and its size is <code>window.innerWidth</code> and
+<code>window.innerHeight</code>.</p>
+<h3 id="camera2d-css-transforms"><code>Camera2D</code>: CSS
+Transforms</h3>
+<p>You can simulate a 2D camera by creating a “world” container
+<code>div</code> that holds all your scene elements, and a “camera”
+<code>div</code> that acts as the viewport.</p>
+<ul>
+<li><strong>Panning:</strong> To move the camera right by 100px, move
+the world left by 100px:
+<code>world.style.transform = 'translateX(-100px)'</code>.</li>
+<li><strong>Zooming:</strong> To zoom in (e.g., 2x), scale the world up
+by 2x: <code>world.style.transform = 'scale(2)'</code>.</li>
+<li>The camera <code>div</code> would have <code>overflow: hidden</code>
+to clip the world to its view.</li>
+</ul>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode html"><code class="sourceCode html"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">&lt;</span><span class="kw">div</span> <span class="er">id</span><span class="ot">=</span><span class="st">&quot;camera&quot;</span> <span class="er">style</span><span class="ot">=</span><span class="st">&quot;width: 800px; height: 600px; overflow: hidden;&quot;</span><span class="dt">&gt;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&lt;</span><span class="kw">div</span> <span class="er">id</span><span class="ot">=</span><span class="st">&quot;world&quot;</span> <span class="er">style</span><span class="ot">=</span><span class="st">&quot;transform-origin: 0 0;&quot;</span><span class="dt">&gt;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">&lt;!-- All your game elements go here --&gt;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&lt;/</span><span class="kw">div</span><span class="dt">&gt;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">&lt;/</span><span class="kw">div</span><span class="dt">&gt;</span></span></code></pre></div>
+<h3 id="subviewport-the-html-canvas-element"><code>SubViewport</code>:
+The HTML <code>&lt;canvas&gt;</code> Element</h3>
+<p>The <code>&lt;canvas&gt;</code> element is the perfect equivalent for
+a <code>SubViewport</code> used as a render target.</p>
+<h4 id="use-case-3d-model-to-ui-icon">Use Case: 3D Model to UI Icon</h4>
+<ol type="1">
+<li><strong>The Sub-Scene:</strong> Create a <code>&lt;canvas&gt;</code>
+element for your sub-scene using a library like
+<strong>Three.js</strong>.</li>
+<li><strong>Off-Screen Rendering:</strong> Instead of rendering to the
+screen, configure Three.js to render to a
+<code>WebGLRenderTarget</code>.</li>
+<li><strong>Extract Texture:</strong> You can then get the data from
+this render target.</li>
+<li><strong>Use in Main Scene:</strong> Create a <em>second</em>
+<code>&lt;canvas&gt;</code> for your main UI. Draw the texture from the
+first canvas onto the second one as an image using
+<code>ctx.drawImage()</code>.</li>
+</ol>
+<h4 id="use-case-dom-to-ui-element-picture-in-picture">Use Case: DOM to
+UI Element (Picture-in-Picture)</h4>
+<p>This is more complex for DOM elements, but libraries like
+<strong><code>html2canvas</code></strong> can achieve it.</p>
+<ol type="1">
+<li><strong>The Sub-Scene:</strong> Create a <code>div</code> containing
+the DOM elements you want to render (e.g., a separate map view). This
+<code>div</code> can be positioned off-screen.</li>
+<li><strong>Render to Canvas:</strong> Use <code>html2canvas</code> to
+render the contents of that <code>div</code> to a
+<code>&lt;canvas&gt;</code> element.
+<code>javascript     html2canvas(document.querySelector("#my-offscreen-div")).then(canvas =&gt; {       // Now you have a canvas with the rendered content     });</code></li>
+<li><strong>Use in Main Scene:</strong> You can now append this
+<code>canvas</code> to your main UI, or use its data URL
+(<code>canvas.toDataURL()</code>) as the source for an
+<code>&lt;img&gt;</code> tag, creating a picture-in-picture effect.</li>
+</ol>
+<p>By combining these techniques—CSS transforms for a main camera and
+<code>&lt;canvas&gt;</code> for sub-scenes—you can replicate the
+powerful, modular rendering architecture of Godot’s Viewport system on
+the web.</p>

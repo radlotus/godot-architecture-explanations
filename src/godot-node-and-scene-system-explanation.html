@@ -1,0 +1,277 @@
+<h1 id="godots-node-and-scene-system-architecture">Godot’s Node and
+Scene System Architecture</h1>
+<p>This document explains Godot’s core Node and Scene system. It’s
+designed for developers who want to understand its underlying principles
+to implement a similar, easy-to-use system for web applications using
+the DOM.</p>
+<h2 id="core-principles">Core Principles</h2>
+<p>Godot’s entire architecture is built upon a few foundational
+ideas:</p>
+<ol type="1">
+<li><strong>The Scene is a Tree of Nodes:</strong> A scene is nothing
+more than a collection of nodes organized in a tree structure. A scene
+file (<code>.tscn</code>) simply describes how to construct this
+tree.</li>
+<li><strong>Everything is a Node:</strong> Nodes are the fundamental
+building blocks. A character, a light, a UI element, and even the root
+of a scene are all different types of nodes with specialized
+functionality.</li>
+<li><strong>Scenes are Reusable Components:</strong> Any scene can be
+instantiated and added as a child within another scene. This allows for
+powerful composition, similar to how you might use prefabs or components
+in other engines.</li>
+<li><strong>Decoupled Blueprint and Instance:</strong> A scene file
+(<code>PackedScene</code>) is a blueprint. When you run a scene or place
+it within another, you create an <em>instance</em>—a live copy made from
+that blueprint.</li>
+</ol>
+<hr />
+<h2 id="the-architectural-building-blocks">The Architectural Building
+Blocks</h2>
+<p>Let’s examine the C++ classes that form this system.</p>
+<h3 id="node---the-atomic-unit">1. <code>Node</code> - The Atomic
+Unit</h3>
+<p>The <code>Node</code> class (<code>scene/main/node.h</code>) is the
+base for all objects in the Scene Tree. It provides the core
+functionality for hierarchy and communication.</p>
+<ul>
+<li><strong>Hierarchy:</strong> It contains a pointer to its
+<code>parent</code> and a list of its <code>children</code>. This forms
+the tree.</li>
+<li><strong>Name and Path:</strong> Every node has a <code>name</code>
+that is unique among its siblings. A <code>NodePath</code> is a string
+representation (e.g., <code>"Player/Sprite"</code>) used to easily
+retrieve any node in the tree relative to another.</li>
+<li><strong>Ownership:</strong> A node has an <code>owner</code>. The
+owner is the root node of the scene this node belongs to. When a scene
+is saved, only nodes owned by the root are included. This is how Godot
+knows which nodes belong to which scene when they are nested.</li>
+<li><strong>Lifecycle Callbacks:</strong> Nodes can respond to events in
+their lifecycle through virtual methods:
+<ul>
+<li><code>_enter_tree()</code>: Called when the node is added to the
+Scene Tree.</li>
+<li><code>_ready()</code>: Called when all children of the node have
+also entered the tree. This is where most initialization logic
+goes.</li>
+<li><code>_process(delta)</code>: Called on every frame.</li>
+<li><code>_exit_tree()</code>: Called when the node is removed from the
+Scene Tree.</li>
+</ul></li>
+</ul>
+<h3 id="scenetree---the-active-scene-manager">2. <code>SceneTree</code>
+- The Active Scene Manager</h3>
+<p>There is only one active <code>SceneTree</code>
+(<code>scene/main/scene_tree.h</code>) at a time. It is the master
+controller for the running game or application.</p>
+<ul>
+<li><strong>The Root:</strong> The <code>SceneTree</code> contains the
+<code>root</code> Viewport, which is the ultimate ancestor of all nodes
+in the running application.</li>
+<li><strong>Current Scene:</strong> It manages a pointer to the
+<code>current_scene</code> (the root node of the scene that is currently
+active).</li>
+<li><strong>Main Loop:</strong> It orchestrates the game loop, calling
+<code>_process</code>, <code>_physics_process</code>, and input
+callbacks on all relevant nodes in the tree.</li>
+<li><strong>Scene Switching:</strong> It provides methods like
+<code>change_scene_to_file(...)</code> which handles the process of
+freeing the current scene and loading/instantiating a new one.</li>
+</ul>
+<h3 id="packedscene---the-scene-blueprint">3. <code>PackedScene</code> -
+The Scene Blueprint</h3>
+<p>This is the most critical concept for saving, loading, and
+instancing. A <code>PackedScene</code>
+(<code>scene/resources/packed_scene.h</code>) is a <code>Resource</code>
+that represents a scene file on disk (e.g., a <code>.tscn</code>
+file).</p>
+<ul>
+<li><strong>Serialization:</strong> When you save a scene in the editor,
+a <code>PackedScene</code> resource is created. It uses an internal
+<code>SceneState</code> to store a serialized representation of the node
+tree, including:
+<ul>
+<li>Node names, types, and parent-child relationships.</li>
+<li>Modified properties (e.g., a Sprite’s texture, a Label’s text).</li>
+<li>Signal connections.</li>
+</ul></li>
+<li><strong>Instantiation:</strong> Its most important method is
+<code>instantiate()</code>. When called, it reads the serialized
+<code>SceneState</code> and constructs a new tree of <code>Node</code>
+objects in memory. This new tree is a complete, independent copy.</li>
+<li><strong>Inheritance:</strong> The <code>SceneState</code> can
+reference another <code>PackedScene</code> as its “base”. When
+instantiating an inherited scene, Godot first instantiates the base
+scene, and then applies the modifications from the inherited scene on
+top of it. This is an incredibly powerful feature for creating
+variations of a common entity.</li>
+</ul>
+<hr />
+<h2 id="translating-the-nodescene-system-to-the-dom">Translating the
+Node/Scene System to the DOM</h2>
+<p>You can build a surprisingly similar and powerful system for the web.
+Here is a conceptual plan:</p>
+<h3 id="the-scene-file-a-json-blueprint">The Scene File: A JSON
+Blueprint</h3>
+<p>Instead of a <code>.tscn</code> file, you can use a JSON file to
+define your scene blueprint. This file would describe the tree
+structure, node types (which map to custom elements or classes), and
+properties.</p>
+<p><strong><code>player.scene.json</code>:</strong></p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;path&quot;</span><span class="fu">:</span> <span class="st">&quot;/Player&quot;</span><span class="fu">,</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;type&quot;</span><span class="fu">:</span> <span class="st">&quot;div&quot;</span><span class="fu">,</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;properties&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;className&quot;</span><span class="fu">:</span> <span class="st">&quot;player-container&quot;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">},</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;children&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;path&quot;</span><span class="fu">:</span> <span class="st">&quot;Sprite&quot;</span><span class="fu">,</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;type&quot;</span><span class="fu">:</span> <span class="st">&quot;img&quot;</span><span class="fu">,</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;properties&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        <span class="dt">&quot;src&quot;</span><span class="fu">:</span> <span class="st">&quot;./player-sprite.png&quot;</span><span class="fu">,</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="dt">&quot;className&quot;</span><span class="fu">:</span> <span class="st">&quot;sprite pixelated&quot;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>      <span class="fu">}</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="fu">}</span><span class="ot">,</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;path&quot;</span><span class="fu">:</span> <span class="st">&quot;HealthBar&quot;</span><span class="fu">,</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;type&quot;</span><span class="fu">:</span> <span class="st">&quot;progress&quot;</span><span class="fu">,</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;properties&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        <span class="dt">&quot;max&quot;</span><span class="fu">:</span> <span class="dv">100</span><span class="fu">,</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>        <span class="dt">&quot;value&quot;</span><span class="fu">:</span> <span class="dv">80</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>      <span class="fu">}</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="fu">}</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<h3 id="the-packedscene-and-scenetree-classes-javascript">The
+<code>PackedScene</code> and <code>SceneTree</code> Classes
+(JavaScript)</h3>
+<p>You would create JavaScript classes to manage loading and
+instantiation.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Manages the currently active scene in the DOM</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> SceneTree {</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">constructor</span>(rootElement) {</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">root</span> <span class="op">=</span> rootElement<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">currentNode</span> <span class="op">=</span> <span class="kw">null</span><span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="kw">async</span> <span class="fu">changeScene</span>(url) {</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="kw">this</span><span class="op">.</span><span class="at">currentNode</span>) {</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>      <span class="kw">this</span><span class="op">.</span><span class="at">currentNode</span><span class="op">.</span><span class="fu">remove</span>()<span class="op">;</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">const</span> packedScene <span class="op">=</span> <span class="kw">new</span> <span class="fu">PackedScene</span>(url)<span class="op">;</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">currentNode</span> <span class="op">=</span> <span class="cf">await</span> packedScene<span class="op">.</span><span class="fu">instantiate</span>()<span class="op">;</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">root</span><span class="op">.</span><span class="fu">appendChild</span>(<span class="kw">this</span><span class="op">.</span><span class="at">currentNode</span>)<span class="op">;</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="co">// Represents the scene blueprint (the .json file)</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> PackedScene {</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">constructor</span>(url) {</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">url</span> <span class="op">=</span> url<span class="op">;</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">_sceneData</span> <span class="op">=</span> <span class="kw">null</span><span class="op">;</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>  <span class="kw">async</span> <span class="fu">_load</span>() {</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="op">!</span><span class="kw">this</span><span class="op">.</span><span class="at">_sceneData</span>) {</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>      <span class="kw">const</span> response <span class="op">=</span> <span class="cf">await</span> <span class="fu">fetch</span>(<span class="kw">this</span><span class="op">.</span><span class="at">url</span>)<span class="op">;</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>      <span class="kw">this</span><span class="op">.</span><span class="at">_sceneData</span> <span class="op">=</span> <span class="cf">await</span> response<span class="op">.</span><span class="fu">json</span>()<span class="op">;</span></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">this</span><span class="op">.</span><span class="at">_sceneData</span><span class="op">;</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>  <span class="kw">async</span> <span class="fu">instantiate</span>() {</span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>    <span class="kw">const</span> data <span class="op">=</span> <span class="cf">await</span> <span class="kw">this</span><span class="op">.</span><span class="fu">_load</span>()<span class="op">;</span></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">this</span><span class="op">.</span><span class="fu">_createNode</span>(data)<span class="op">;</span></span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>  <span class="fu">_createNode</span>(nodeData) {</span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>    <span class="kw">const</span> element <span class="op">=</span> <span class="bu">document</span><span class="op">.</span><span class="fu">createElement</span>(nodeData<span class="op">.</span><span class="at">type</span>)<span class="op">;</span></span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>    element<span class="op">.</span><span class="at">id</span> <span class="op">=</span> nodeData<span class="op">.</span><span class="at">path</span><span class="op">.</span><span class="fu">split</span>(<span class="st">&#39;/&#39;</span>)<span class="op">.</span><span class="fu">pop</span>()<span class="op">;</span> <span class="co">// Simple name for ID</span></span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Apply properties</span></span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> (<span class="kw">const</span> key <span class="kw">in</span> nodeData<span class="op">.</span><span class="at">properties</span>) {</span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>      element[key] <span class="op">=</span> nodeData<span class="op">.</span><span class="at">properties</span>[key]<span class="op">;</span></span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Recursively create children</span></span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (nodeData<span class="op">.</span><span class="at">children</span>) {</span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>      <span class="cf">for</span> (<span class="kw">const</span> childData <span class="kw">of</span> nodeData<span class="op">.</span><span class="at">children</span>) {</span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a>        <span class="kw">const</span> childElement <span class="op">=</span> <span class="kw">this</span><span class="op">.</span><span class="fu">_createNode</span>(childData)<span class="op">;</span></span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>        element<span class="op">.</span><span class="fu">appendChild</span>(childElement)<span class="op">;</span></span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-55"><a href="#cb2-55" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> element<span class="op">;</span></span>
+<span id="cb2-56"><a href="#cb2-56" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-57"><a href="#cb2-57" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<h3 id="mapping-godot-concepts-to-the-dom">Mapping Godot Concepts to the
+DOM</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Godot Concept</th>
+<th style="text-align: left;">Web Equivalent (Conceptual)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><strong><code>Node</code></strong></td>
+<td style="text-align: left;"><code>HTMLElement</code>. The DOM is
+already a node tree. You could create a base custom element
+(<code>class GodotElement extends HTMLElement</code>) to implement
+lifecycle methods (<code>connectedCallback</code> for
+<code>_ready</code>, etc.).</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>Scene Tree</strong></td>
+<td style="text-align: left;">The live DOM itself.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong><code>SceneTree</code>
+Class</strong></td>
+<td style="text-align: left;">A manager class (like the JS example
+above) that controls what is currently displayed in the main part of
+your page.</td>
+</tr>
+<tr class="even">
+<td
+style="text-align: left;"><strong><code>PackedScene</code></strong></td>
+<td style="text-align: left;">A JS class that fetches and parses your
+scene’s <code>.json</code> file.</td>
+</tr>
+<tr class="odd">
+<td
+style="text-align: left;"><strong><code>instantiate()</code></strong></td>
+<td style="text-align: left;">A method in your <code>PackedScene</code>
+class that recursively builds a DOM tree from the JSON data using
+<code>document.createElement</code>.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>Scene Inheritance</strong></td>
+<td style="text-align: left;">This is the most advanced feature. You
+could add an <code>"extends": "path/to/base.scene.json"</code> field to
+your JSON. Your <code>instantiate</code> logic would then need to:</td>
+</tr>
+</tbody>
+</table>
+<ol type="1">
+<li>Fetch and instantiate the base scene first.</li>
+<li>Traverse the new DOM tree and the inherited JSON
+simultaneously.</li>
+<li>Deep-merge properties, overriding base properties with the ones from
+the inherited file. | | <strong>Saving a Scene</strong> | A JavaScript
+function that takes a root <code>HTMLElement</code>, traverses its
+children, and serializes the structure, element types, and relevant
+attributes/properties back into your JSON format. |</li>
+</ol>
+<p>By adopting this blueprint/instance pattern, you can bring Godot’s
+powerful and easy-to-use composition workflow to your web projects,
+making your UI and application logic far more modular and
+manageable.</p>

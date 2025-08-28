@@ -1,0 +1,185 @@
+<h1 id="godots-import-system-from-asset-to-resource">Godot’s Import
+System: From Asset to Resource</h1>
+<p>This document explains Godot’s Import System, a critical
+<strong>editor-time</strong> process that converts your source assets
+(like <code>.png</code> images or <code>.gltf</code> models) into
+optimized, engine-ready formats. This system is a cornerstone of Godot’s
+design, ensuring fast load times and high performance at runtime.</p>
+<h2 id="core-principles">Core Principles</h2>
+<ol type="1">
+<li><strong>Source Files Are Not Game Files:</strong> Godot makes a
+clear distinction between your source assets, which are made for human
+editing, and the final game data, which is optimized for the engine. The
+game almost never loads your source files directly.</li>
+<li><strong>Optimization is an Offline Process:</strong> Instead of
+parsing complex files like <code>.blend</code> or <code>.psd</code> at
+runtime (which would be very slow), Godot does all the heavy lifting in
+the editor, <em>before</em> the game is even run. This is analogous to a
+“build step” in software development.</li>
+<li><strong>Configuration is Metadata:</strong> The settings you choose
+for an import (e.g., compression type, filter modes) are stored as
+metadata in a separate <code>.import</code> file, leaving the original
+source asset untouched.</li>
+<li><strong>Transparency at Runtime:</strong> The entire process is
+transparent to the developer. In your code, you still reference
+<code>res://player.png</code>, but the engine intelligently loads the
+optimized version from a hidden folder.</li>
+</ol>
+<hr />
+<h2 id="the-architectural-building-blocks">The Architectural Building
+Blocks</h2>
+<p>The import pipeline is primarily an editor feature, with its core
+logic defined by the <code>ResourceImporter</code> class.</p>
+<h3 id="the-resourceimporter-class">The <code>ResourceImporter</code>
+Class</h3>
+<p><code>ResourceImporter</code>
+(<code>core/io/resource_importer.h</code>) is an abstract base class.
+Godot has many concrete implementations of it, one for each type of
+asset it can handle (e.g., <code>ResourceImporterTexture</code>,
+<code>ResourceImporterScene</code>,
+<code>ResourceImporterWAV</code>).</p>
+<p>Each specific importer defines:</p>
+<ul>
+<li><strong>What it can import:</strong> e.g.,
+<code>"png", "jpg"</code>.</li>
+<li><strong>The options it provides:</strong> It returns a list of
+properties (<code>PropertyInfo</code>) that the editor uses to
+dynamically build the UI in the “Import” dock.</li>
+<li><strong>The import logic:</strong> The core <code>import()</code>
+method, which contains the code to read the source file, apply the
+chosen options, and save the result in an engine-native format.</li>
+</ul>
+<h3 id="the-import-workflow-step-by-step">The Import Workflow
+Step-by-Step</h3>
+<ol type="1">
+<li><strong>File Detection:</strong> You add a source asset (e.g.,
+<code>player.png</code>) to your project folder.</li>
+<li><strong>Importer Selection:</strong> The
+<code>EditorFileSystem</code> detects the new file and finds the
+registered <code>ResourceImporter</code> that handles the
+<code>.png</code> extension (<code>ResourceImporterTexture</code>).</li>
+<li><strong>Default Import:</strong> The importer immediately runs with
+default settings, creating an optimized version of the asset.</li>
+<li><strong>Configuration:</strong> You can select the asset and change
+its import settings in the “Import” dock. The options you see (e.g.,
+Compression Mode, Mipmaps) are provided directly by the
+<code>ResourceImporterTexture</code> class.</li>
+<li><strong><code>.import</code> File:</strong> When you change settings
+and click “Reimport,” the editor saves your choices into a text file
+named <code>player.png.import</code>. This file lives right next to your
+source asset.</li>
+<li><strong>The Conversion:</strong> The <code>import()</code> method of
+<code>ResourceImporterTexture</code> is called. It reads
+<code>player.png</code>, reads your settings from
+<code>player.png.import</code>, and performs the conversion. This might
+involve generating mipmaps, applying VRAM compression, and creating a
+Godot-native <code>.ctex</code> (Compressed Texture) file.</li>
+<li><strong>The <code>.godot/imported</code> Directory:</strong> The
+final, optimized file (e.g., <code>player.png-a1b2c3d4.ctex</code>) is
+saved into the hidden <code>.godot/imported</code> folder. Your project
+folder remains clean.</li>
+<li><strong>Runtime Loading:</strong> In your game, you write
+<code>load("res://player.png")</code>. The <code>ResourceLoader</code>
+sees this path, checks the corresponding <code>.import</code> data, and
+transparently remaps the load path to the optimized <code>.ctex</code>
+file inside <code>.godot/imported</code>. The original
+<code>player.png</code> is never even touched by the running game.</li>
+</ol>
+<hr />
+<h2 id="translating-the-import-system-to-the-web">Translating the Import
+System to the Web</h2>
+<p>This editor-time optimization process has a very strong and direct
+parallel in modern web development: <strong>the build
+pipeline</strong>.</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Godot Import System</th>
+<th style="text-align: left;">Modern Web Development Equivalent</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><strong>Source Assets</strong>
+(<code>player.png</code>, <code>styles.scss</code>)</td>
+<td style="text-align: left;">Files in your <code>src/</code>
+directory.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>The Importer</strong>
+(<code>ResourceImporter</code>)</td>
+<td style="text-align: left;">A <strong>build tool</strong> like
+<strong>Vite</strong>, <strong>Webpack</strong>, or
+<strong>Parcel</strong>.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>Import Options</strong> (in the
+dock)</td>
+<td style="text-align: left;">The configuration file for your build tool
+(e.g., <code>vite.config.js</code>).</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong><code>.import</code>
+File</strong></td>
+<td style="text-align: left;">The specific rules and plugin
+configurations within your <code>vite.config.js</code>.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>The “Reimport”
+Button</strong></td>
+<td style="text-align: left;">The <code>npm run build</code> or
+<code>npm run dev</code> command.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>The <code>.godot/imported</code>
+Directory</strong></td>
+<td style="text-align: left;">The <code>dist/</code> (distribution)
+directory.</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>Runtime Loading</strong>
+(<code>load(...)</code>)</td>
+<td style="text-align: left;">The browser fetching assets from the
+<code>dist/</code> directory via <code>&lt;script&gt;</code>,
+<code>&lt;link&gt;</code>, or <code>&lt;img&gt;</code> tags.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="the-web-workflow">The Web Workflow</h3>
+<ol type="1">
+<li><strong>Source Files:</strong> You create your source files in a
+<code>src/</code> directory. This includes TypeScript/JSX files,
+high-resolution images, and SASS/PostCSS files.</li>
+<li><strong>Configuration:</strong> You configure
+<code>vite.config.js</code> or <code>webpack.config.js</code>. You add
+plugins to handle different file types (e.g.,
+<code>@vitejs/plugin-react</code> for JSX, <code>imagemin</code> for
+image compression).</li>
+<li><strong>The Build Step:</strong> You run <code>npm run build</code>.
+The build tool:
+<ul>
+<li>Transpiles your TypeScript to JavaScript.</li>
+<li>Bundles your JavaScript into smaller files.</li>
+<li>Compresses your images.</li>
+<li>Converts your SASS to standard CSS.</li>
+</ul></li>
+<li><strong>The <code>dist/</code> Directory:</strong> The build tool
+outputs all these optimized, browser-ready files into a
+<code>dist/</code> directory.</li>
+<li><strong>Runtime:</strong> You deploy the <code>dist/</code>
+directory to your web server. The user’s browser only ever downloads
+these small, fast, optimized files. It never sees your source
+<code>.ts</code> or <code>.scss</code> files.</li>
+</ol>
+<p>When you write <code>import myImage from './logo.svg'</code> in your
+JavaScript source code, the build tool intercepts this. It processes
+<code>logo.svg</code>, copies it to the <code>dist</code> folder (often
+with a unique hashed filename for caching), and the <code>myImage</code>
+variable becomes the final public URL to that optimized file. This is
+the exact same principle as Godot’s import system: a developer-friendly
+path in your source code is transparently mapped to an optimized output
+file at runtime.</p>

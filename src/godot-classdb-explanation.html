@@ -1,0 +1,217 @@
+<h1 id="godots-classdb-the-reflection-system">Godot’s ClassDB: The
+Reflection System</h1>
+<p>This document explains Godot’s <code>ClassDB</code>, the engine’s
+powerful, low-level reflection system. <code>ClassDB</code> is not a
+system that game developers typically interact with directly, but it is
+the single most important piece of architecture that enables the entire
+Godot editor and the GDScript language to function.</p>
+<h2 id="core-principles">Core Principles</h2>
+<ol type="1">
+<li><strong>A Centralized Class Registry:</strong> <code>ClassDB</code>
+is a global singleton that acts as a database or “phone book” for every
+class registered with the engine. At startup, it knows about every
+class, what it inherits from, and what it can do.</li>
+<li><strong>Reflection is Key:</strong> Reflection is the ability of a
+program to examine, introspect, and modify its own structure and
+behavior at runtime. <code>ClassDB</code> allows any part of the engine
+to ask questions like, “What properties does a <code>Sprite2D</code>
+have?” or “Does <code>AnimationPlayer</code> have a method called
+<code>play</code>?”</li>
+<li><strong>Enabling the Editor:</strong> The Godot editor is not a
+separate application; it is a Godot game that makes heavy use of
+<code>ClassDB</code>. The Inspector, the scene tree, the code editor,
+and other tools are all built on top of the reflection data provided by
+<code>ClassDB</code>.</li>
+<li><strong>Bridging C++ and Scripting:</strong> <code>ClassDB</code> is
+the bridge that allows a dynamic, interpreted language like GDScript to
+seamlessly interact with the engine’s core C++ classes.</li>
+</ol>
+<hr />
+<h2 id="the-architectural-building-blocks">The Architectural Building
+Blocks</h2>
+<h3 id="the-classdb-singleton">The <code>ClassDB</code> Singleton</h3>
+<p><code>ClassDB</code> (<code>core/object/class_db.h</code>) is a
+singleton that primarily contains a large <code>HashMap</code> where
+keys are the names of classes (<code>StringName</code>) and values are
+<code>ClassInfo</code> structs.</p>
+<h3 id="the-classinfo-struct">The <code>ClassInfo</code> Struct</h3>
+<p>This internal struct holds all the metadata for a single class:</p>
+<ul>
+<li><strong>Inheritance:</strong> A pointer to the
+<code>ClassInfo</code> of its parent class.</li>
+<li><strong>Properties:</strong> A list of all registered properties,
+including their name, type, and hint strings for the editor.</li>
+<li><strong>Methods:</strong> A map of all registered methods. This
+doesn’t just store the name, but a <code>MethodBind</code> object, which
+is a highly optimized C++ object for calling the method directly.</li>
+<li><strong>Signals:</strong> A map of all signals the class can
+emit.</li>
+<li><strong>Constants &amp; Enums:</strong> A list of all exposed
+integer constants and enumerations.</li>
+<li><strong>Constructor:</strong> A function pointer to a C++ template
+function that can create a new instance of this class.</li>
+</ul>
+<h3 id="the-registration-process">The Registration Process</h3>
+<p>Classes are not automatically known to <code>ClassDB</code>. They
+must be explicitly registered.</p>
+<ol type="1">
+<li><p><strong>The <code>GDCLASS</code> Macro:</strong> In the header
+file of every Godot class (e.g.,
+<code>class Sprite2D : public Node2D { GDCLASS(Sprite2D, Node2D); ... }</code>),
+this macro injects the necessary boilerplate code for
+registration.</p></li>
+<li><p><strong>The <code>_bind_methods</code> Function:</strong> Each
+class has a static C++ function called <code>_bind_methods</code>. This
+function is called only once when the engine starts up. Inside this
+function, the developer explicitly registers every property, method, and
+signal they want to expose to the reflection system.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Simplified example from a C++ source file</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> MyNode<span class="op">::</span>_bind_methods<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="co">// Expose a method to be used in GDScript and the editor</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  ClassDB<span class="op">::</span>bind_method<span class="op">(</span>D_METHOD<span class="op">(</span><span class="st">&quot;my_function&quot;</span><span class="op">,</span> <span class="st">&quot;arg1&quot;</span><span class="op">),</span> <span class="op">&amp;</span>MyNode<span class="op">::</span>my_function<span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  <span class="co">// Expose a property with a getter and setter</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>  ClassDB<span class="op">::</span>add_property<span class="op">(</span><span class="st">&quot;my_property&quot;</span><span class="op">,</span> PropertyInfo<span class="op">(</span>Variant<span class="op">::</span>INT<span class="op">,</span> <span class="st">&quot;my_property&quot;</span><span class="op">),</span> <span class="st">&quot;set_my_property&quot;</span><span class="op">,</span> <span class="st">&quot;get_my_property&quot;</span><span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>  <span class="co">// Expose a signal</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>  ClassDB<span class="op">::</span>add_signal<span class="op">(</span><span class="st">&quot;my_signal&quot;</span><span class="op">,</span> MethodInfo<span class="op">(</span><span class="st">&quot;my_signal&quot;</span><span class="op">,</span> PropertyInfo<span class="op">(</span>Variant<span class="op">::</span>STRING<span class="op">,</span> <span class="st">&quot;some_data&quot;</span><span class="op">)));</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></li>
+</ol>
+<h3 id="how-is-classdb-used">How is <code>ClassDB</code> Used?</h3>
+<ul>
+<li><strong>The Inspector:</strong> When you select a node, the
+Inspector asks <code>ClassDB</code> for that class’s property list. It
+then iterates over the list and dynamically creates the appropriate UI
+controls (a text field for a <code>String</code>, a slider for an
+integer with a <code>range</code> hint, etc.). When you change a value
+in the Inspector, it calls the property’s registered setter method.</li>
+<li><strong>Scene Serialization:</strong> When saving a scene
+(<code>.tscn</code>), the engine queries <code>ClassDB</code> for the
+property list and their default values. It compares the node’s current
+values to the defaults and only saves the properties that have been
+changed.</li>
+<li><strong>GDScript:</strong> When you write
+<code>my_node.my_property = 10</code>, the GDScript interpreter asks
+<code>ClassDB</code> for the setter of <code>"my_property"</code> on the
+<code>my_node</code>’s class and calls it. This is how dynamic,
+string-based access works so efficiently.</li>
+</ul>
+<hr />
+<h2 id="translating-classdb-to-the-web">Translating <code>ClassDB</code>
+to the Web</h2>
+<p>While JavaScript has some built-in reflection, it is not as
+structured as <code>ClassDB</code>. To build a tool or editor for the
+web, you would create your own, simplified version of this pattern. The
+goal is to make your components <strong>self-describing</strong>.</p>
+<h3 id="the-static-metadata-pattern">The Static Metadata Pattern</h3>
+<p>The cleanest way to achieve this is by adding static methods or
+properties to your JavaScript classes that define their own
+interface.</p>
+<p><strong>Example Self-Describing Component:</strong></p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> PlayerComponent {</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">constructor</span>() {</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">speed</span> <span class="op">=</span> <span class="dv">100</span><span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">playerName</span> <span class="op">=</span> <span class="st">&quot;Hero&quot;</span><span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">jump</span>(height) {</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">console</span><span class="op">.</span><span class="fu">log</span>(<span class="vs">`Jumping </span><span class="sc">${</span>height<span class="sc">}</span><span class="vs"> units!`</span>)<span class="op">;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  <span class="co">// --- Static Metadata for our ClassDB ---</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  <span class="kw">static</span> <span class="fu">getProperties</span>() {</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>      <span class="dt">speed</span><span class="op">:</span> { <span class="dt">type</span><span class="op">:</span> <span class="st">&#39;number&#39;</span><span class="op">,</span> <span class="cf">default</span><span class="op">:</span> <span class="dv">100</span><span class="op">,</span> <span class="dt">hint</span><span class="op">:</span> <span class="st">&#39;range(0, 500)&#39;</span> }<span class="op">,</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>      <span class="dt">playerName</span><span class="op">:</span> { <span class="dt">type</span><span class="op">:</span> <span class="st">&#39;string&#39;</span><span class="op">,</span> <span class="cf">default</span><span class="op">:</span> <span class="st">&#39;Hero&#39;</span> }</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    }<span class="op">;</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>  <span class="kw">static</span> <span class="fu">getMethods</span>() {</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>      <span class="dt">jump</span><span class="op">:</span> { <span class="dt">args</span><span class="op">:</span> [<span class="st">&#39;height&#39;</span>] }</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    }<span class="op">;</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>  <span class="kw">static</span> <span class="fu">getSignals</span>() {</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>      <span class="dt">health_depleted</span><span class="op">:</span> { <span class="dt">args</span><span class="op">:</span> [] }</span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>    }<span class="op">;</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<h3 id="the-classdb-implementation">The <code>ClassDB</code>
+Implementation</h3>
+<p>You would create a singleton manager to act as your
+<code>ClassDB</code>.</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> ClassDB {</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">constructor</span>() {</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">classes</span> <span class="op">=</span> <span class="kw">new</span> <span class="bu">Map</span>()<span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">register</span>(className<span class="op">,</span> classDef) {</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">classes</span><span class="op">.</span><span class="fu">set</span>(className<span class="op">,</span> {</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>      <span class="dt">constructor</span><span class="op">:</span> classDef<span class="op">,</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>      <span class="dt">properties</span><span class="op">:</span> classDef<span class="op">.</span><span class="at">getProperties</span> <span class="op">?</span> classDef<span class="op">.</span><span class="fu">getProperties</span>() <span class="op">:</span> {}<span class="op">,</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>      <span class="dt">methods</span><span class="op">:</span> classDef<span class="op">.</span><span class="at">getMethods</span> <span class="op">?</span> classDef<span class="op">.</span><span class="fu">getMethods</span>() <span class="op">:</span> {}<span class="op">,</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>      <span class="dt">signals</span><span class="op">:</span> classDef<span class="op">.</span><span class="at">getSignals</span> <span class="op">?</span> classDef<span class="op">.</span><span class="fu">getSignals</span>() <span class="op">:</span> {}<span class="op">,</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    })<span class="op">;</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">getClassInfo</span>(className) {</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">this</span><span class="op">.</span><span class="at">classes</span><span class="op">.</span><span class="fu">get</span>(className)<span class="op">;</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">instantiate</span>(className) {</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    <span class="kw">const</span> info <span class="op">=</span> <span class="kw">this</span><span class="op">.</span><span class="fu">getClassInfo</span>(className)<span class="op">;</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (info) {</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>      <span class="cf">return</span> <span class="kw">new</span> info<span class="op">.</span><span class="fu">constructor</span>()<span class="op">;</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">null</span><span class="op">;</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> classDB <span class="op">=</span> <span class="kw">new</span> <span class="fu">ClassDB</span>()<span class="op">;</span></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a><span class="co">// Register your components at startup</span></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>classDB<span class="op">.</span><span class="fu">register</span>(<span class="st">&quot;PlayerComponent&quot;</span><span class="op">,</span> PlayerComponent)<span class="op">;</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a><span class="co">// --- How an Inspector would use it ---</span></span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">createInspectorFor</span>(object) {</span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>  <span class="kw">const</span> className <span class="op">=</span> object<span class="op">.</span><span class="at">constructor</span><span class="op">.</span><span class="at">name</span><span class="op">;</span></span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>  <span class="kw">const</span> classInfo <span class="op">=</span> classDB<span class="op">.</span><span class="fu">getClassInfo</span>(className)<span class="op">;</span></span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="op">!</span>classInfo) <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>  <span class="kw">const</span> inspectorDiv <span class="op">=</span> <span class="bu">document</span><span class="op">.</span><span class="fu">createElement</span>(<span class="st">&#39;div&#39;</span>)<span class="op">;</span></span>
+<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (<span class="kw">const</span> propName <span class="kw">in</span> classInfo<span class="op">.</span><span class="at">properties</span>) {</span>
+<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a>    <span class="kw">const</span> propInfo <span class="op">=</span> classInfo<span class="op">.</span><span class="at">properties</span>[propName]<span class="op">;</span></span>
+<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Create a label</span></span>
+<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a>    <span class="kw">const</span> label <span class="op">=</span> <span class="bu">document</span><span class="op">.</span><span class="fu">createElement</span>(<span class="st">&#39;label&#39;</span>)<span class="op">;</span></span>
+<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a>    label<span class="op">.</span><span class="at">textContent</span> <span class="op">=</span> propName<span class="op">;</span></span>
+<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Create an input based on the type</span></span>
+<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a>    <span class="kw">const</span> input <span class="op">=</span> <span class="bu">document</span><span class="op">.</span><span class="fu">createElement</span>(<span class="st">&#39;input&#39;</span>)<span class="op">;</span></span>
+<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a>    input<span class="op">.</span><span class="at">type</span> <span class="op">=</span> propInfo<span class="op">.</span><span class="at">type</span><span class="op">;</span> <span class="co">// e.g., &#39;number&#39;, &#39;string&#39;</span></span>
+<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a>    input<span class="op">.</span><span class="at">value</span> <span class="op">=</span> object[propName]<span class="op">;</span></span>
+<span id="cb3-52"><a href="#cb3-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-53"><a href="#cb3-53" aria-hidden="true" tabindex="-1"></a>    <span class="co">// When the input changes, update the actual object property</span></span>
+<span id="cb3-54"><a href="#cb3-54" aria-hidden="true" tabindex="-1"></a>    input<span class="op">.</span><span class="at">onchange</span> <span class="op">=</span> (e) <span class="kw">=&gt;</span> {</span>
+<span id="cb3-55"><a href="#cb3-55" aria-hidden="true" tabindex="-1"></a>      object[propName] <span class="op">=</span> e<span class="op">.</span><span class="at">target</span><span class="op">.</span><span class="at">value</span><span class="op">;</span></span>
+<span id="cb3-56"><a href="#cb3-56" aria-hidden="true" tabindex="-1"></a>    }<span class="op">;</span></span>
+<span id="cb3-57"><a href="#cb3-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a>    inspectorDiv<span class="op">.</span><span class="fu">appendChild</span>(label)<span class="op">;</span></span>
+<span id="cb3-59"><a href="#cb3-59" aria-hidden="true" tabindex="-1"></a>    inspectorDiv<span class="op">.</span><span class="fu">appendChild</span>(input)<span class="op">;</span></span>
+<span id="cb3-60"><a href="#cb3-60" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a>  <span class="bu">document</span><span class="op">.</span><span class="at">body</span><span class="op">.</span><span class="fu">appendChild</span>(inspectorDiv)<span class="op">;</span></span>
+<span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb3-64"><a href="#cb3-64" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-65"><a href="#cb3-65" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> player <span class="op">=</span> classDB<span class="op">.</span><span class="fu">instantiate</span>(<span class="st">&quot;PlayerComponent&quot;</span>)<span class="op">;</span></span>
+<span id="cb3-66"><a href="#cb3-66" aria-hidden="true" tabindex="-1"></a><span class="fu">createInspectorFor</span>(player)<span class="op">;</span></span></code></pre></div>
+<p>By adopting this pattern, you create a powerful foundation for
+building development tools, editors, and serialization systems, just
+like Godot does.</p>

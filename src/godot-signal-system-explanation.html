@@ -1,0 +1,200 @@
+<h1 id="godots-signal-system-architecture">Godot’s Signal System
+Architecture</h1>
+<p>This document explains Godot’s Signal system, the engine’s
+implementation of the Observer design pattern. Signals are the primary
+mechanism for creating decoupled, event-driven code, allowing different
+parts of your application to communicate without having direct
+references to each other.</p>
+<h2 id="core-principles">Core Principles</h2>
+<ol type="1">
+<li><strong>Decoupling:</strong> The object that emits a signal (the
+“emitter”) has no knowledge of the objects that receive it (the
+“listeners”). It simply broadcasts that an event has occurred. This
+allows you to create highly reusable components.</li>
+<li><strong>Event-Driven:</strong> Signals allow you to react to events
+rather than constantly checking for state changes in the main loop
+(<code>_process</code>). This leads to cleaner, more efficient, and more
+organized code.</li>
+<li><strong>Many-to-Many Communication:</strong> Any number of listeners
+can connect to a single signal, and a single object can listen to
+signals from many different emitters.</li>
+<li><strong>Defined in <code>Object</code>:</strong> The signal
+mechanism is built into the base <code>Object</code> class, meaning
+<em>any</em> Godot object can emit or connect to signals, not just
+nodes.</li>
+</ol>
+<hr />
+<h2 id="the-architectural-building-blocks">The Architectural Building
+Blocks</h2>
+<p>The entire Signal system is defined within
+<code>core/object/object.h</code>.</p>
+<h3 id="the-internal-mechanism">The Internal Mechanism</h3>
+<p>Every object in Godot has a hidden map that stores its signal
+data.</p>
+<ul>
+<li><strong><code>signal_map</code>:</strong> This is a
+<code>HashMap</code> where the keys are the names of the signals (e.g.,
+<code>"pressed"</code>, <code>"body_entered"</code>) and the values are
+<code>SignalData</code> structs.</li>
+<li><strong><code>SignalData</code>:</strong> This struct holds a list
+of all the functions that are listening to that specific signal.</li>
+<li><strong><code>Connection</code>:</strong> Each entry in that list is
+a <code>Connection</code> object. A <code>Connection</code> simply
+stores the <code>Callable</code> (the listener’s object and method name)
+that needs to be executed when the signal is fired.</li>
+</ul>
+<h3 id="the-three-key-operations">The Three Key Operations</h3>
+<ol type="1">
+<li><p><strong>Defining a Signal:</strong> You declare a signal with the
+<code>signal</code> keyword in GDScript. In C++, this is done via
+<code>ADD_SIGNAL</code>. This creates an entry in the object’s
+<code>signal_map</code>.</p></li>
+<li><p><strong>Connecting (Listening):</strong> When you call
+<code>emitter.connect("signal_name", my_listener_callable)</code>, you
+are adding a new <code>Connection</code> object to the
+<code>signal_name</code> list inside the <code>emitter</code>’s
+<code>signal_map</code>.</p></li>
+<li><p><strong>Emitting (Broadcasting):</strong> When you call
+<code>emitter.emit_signal("signal_name", arg1, ...)</code>:</p>
+<ol type="a">
+<li>The <code>emitter</code> looks up <code>"signal_name"</code> in its
+<code>signal_map</code>.</li>
+<li>It gets the list of all <code>Connection</code> objects for that
+signal.</li>
+<li>It iterates through the list and, for each <code>Connection</code>,
+it calls the stored <code>Callable</code>.</li>
+<li>The arguments you passed to <code>emit_signal</code> are forwarded
+to the listener’s method.</li>
+</ol></li>
+</ol>
+<p>This simple, robust design allows for powerful and flexible
+communication between objects without creating hard dependencies.</p>
+<hr />
+<h2 id="translating-the-signal-system-to-the-web">Translating the Signal
+System to the Web</h2>
+<p>The observer pattern is ubiquitous in JavaScript. You can replicate
+Godot’s Signal system very easily using either native browser APIs or a
+simple, custom class.</p>
+<h3 id="the-native-browser-way-eventtarget">The Native Browser Way:
+<code>EventTarget</code></h3>
+<p>The browser has a built-in class for this exact purpose called
+<code>EventTarget</code>. All DOM elements (<code>HTMLElement</code>)
+already inherit from it.</p>
+<ul>
+<li><strong><code>connect</code> -&gt;
+<code>addEventListener</code>:</strong> This is the direct
+equivalent.</li>
+<li><strong><code>emit_signal</code> -&gt;
+<code>dispatchEvent</code>:</strong> You create a
+<code>CustomEvent</code> to send your signal.</li>
+</ul>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Any class can become a signal emitter by extending EventTarget</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyButton <span class="kw">extends</span> <span class="bu">EventTarget</span> {</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">click</span>() {</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">console</span><span class="op">.</span><span class="fu">log</span>(<span class="st">&quot;Button emitting &#39;pressed&#39; signal.&quot;</span>)<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Create a custom event. The &#39;detail&#39; property can hold arguments.</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">const</span> <span class="bu">event</span> <span class="op">=</span> <span class="kw">new</span> <span class="bu">CustomEvent</span>(<span class="st">&quot;pressed&quot;</span><span class="op">,</span> {</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>      <span class="dt">detail</span><span class="op">:</span> { <span class="dt">pressTime</span><span class="op">:</span> <span class="bu">Date</span><span class="op">.</span><span class="fu">now</span>() }</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    })<span class="op">;</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Dispatch the event to all listeners.</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="fu">dispatchEvent</span>(<span class="bu">event</span>)<span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> button <span class="op">=</span> <span class="kw">new</span> <span class="fu">MyButton</span>()<span class="op">;</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="co">// A listener object</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> player <span class="op">=</span> {</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>  <span class="dt">onButtonPressed</span><span class="op">:</span> (<span class="bu">event</span>) <span class="kw">=&gt;</span> {</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="bu">console</span><span class="op">.</span><span class="fu">log</span>(<span class="vs">`Player received &#39;pressed&#39; signal! Time: </span><span class="sc">${</span><span class="bu">event</span><span class="op">.</span><span class="at">detail</span><span class="op">.</span><span class="at">pressTime</span><span class="sc">}</span><span class="vs">`</span>)<span class="op">;</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>}<span class="op">;</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="co">// Connect the signal</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>button<span class="op">.</span><span class="fu">addEventListener</span>(<span class="st">&quot;pressed&quot;</span><span class="op">,</span> player<span class="op">.</span><span class="at">onButtonPressed</span>)<span class="op">;</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a><span class="co">// Emit the signal</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>button<span class="op">.</span><span class="fu">click</span>()<span class="op">;</span></span></code></pre></div>
+<h3 id="the-lightweight-custom-way-eventemitter-class">The Lightweight
+Custom Way: <code>EventEmitter</code> Class</h3>
+<p>For maximum clarity and to avoid relying on DOM-specific classes, you
+can write a simple <code>EventEmitter</code> class from scratch. This
+perfectly mimics Godot’s internal <code>signal_map</code>.</p>
+<p><strong>Example <code>EventEmitter</code>
+Implementation:</strong></p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="bu">EventEmitter</span> {</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">constructor</span>() {</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// This is the equivalent of Godot&#39;s `signal_map`</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">events</span> <span class="op">=</span> {}<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="co">/**</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co">   * Subscribe to a signal.</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="co">   * </span><span class="an">@param</span><span class="co"> </span><span class="cv">{string}</span><span class="co"> eventName - The name of the signal (e.g., &quot;pressed&quot;).</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co">   * </span><span class="an">@param</span><span class="co"> </span><span class="cv">{Function}</span><span class="co"> callback - The function to call when the signal is emitted.</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="co">   */</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">on</span>(eventName<span class="op">,</span> callback) {</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="op">!</span><span class="kw">this</span><span class="op">.</span><span class="at">events</span>[eventName]) {</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>      <span class="kw">this</span><span class="op">.</span><span class="at">events</span>[eventName] <span class="op">=</span> []<span class="op">;</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">events</span>[eventName]<span class="op">.</span><span class="fu">push</span>(callback)<span class="op">;</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>  <span class="co">/**</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a><span class="co">   * Unsubscribe from a signal.</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="co">   * </span><span class="an">@param</span><span class="co"> </span><span class="cv">{string}</span><span class="co"> eventName - The name of the signal.</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a><span class="co">   * </span><span class="an">@param</span><span class="co"> </span><span class="cv">{Function}</span><span class="co"> callback - The specific callback to remove.</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="co">   */</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">off</span>(eventName<span class="op">,</span> callback) {</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="op">!</span><span class="kw">this</span><span class="op">.</span><span class="at">events</span>[eventName]) <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">events</span>[eventName] <span class="op">=</span> <span class="kw">this</span><span class="op">.</span><span class="at">events</span>[eventName]<span class="op">.</span><span class="fu">filter</span>(</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>      (listener) <span class="kw">=&gt;</span> listener <span class="op">!==</span> callback</span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>    )<span class="op">;</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>  <span class="co">/**</span></span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a><span class="co">   * Emit a signal, calling all subscribed listeners.</span></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a><span class="co">   * </span><span class="an">@param</span><span class="co"> </span><span class="cv">{string}</span><span class="co"> eventName - The name of the signal to emit.</span></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a><span class="co">   * </span><span class="an">@param</span><span class="co"> </span><span class="cv">{...any}</span><span class="co"> args - Arguments to pass to the listeners.</span></span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a><span class="co">   */</span></span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>  <span class="fu">emit</span>(eventName<span class="op">,</span> <span class="op">...</span>args) {</span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="op">!</span><span class="kw">this</span><span class="op">.</span><span class="at">events</span>[eventName]) <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Call each listener with the provided arguments.</span></span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="at">events</span>[eventName]<span class="op">.</span><span class="fu">forEach</span>(callback <span class="kw">=&gt;</span> {</span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>      <span class="fu">callback</span>(<span class="op">...</span>args)<span class="op">;</span></span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>    })<span class="op">;</span></span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a><span class="co">// --- How to use it ---</span></span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a><span class="co">// Your game objects can inherit from it or use it via composition.</span></span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyButton <span class="kw">extends</span> <span class="bu">EventEmitter</span> {</span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>  <span class="fu">press</span>() {</span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>    <span class="bu">console</span><span class="op">.</span><span class="fu">log</span>(<span class="st">&quot;Button emitting &#39;pressed&#39; signal.&quot;</span>)<span class="op">;</span></span>
+<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a>    <span class="kw">this</span><span class="op">.</span><span class="fu">emit</span>(<span class="st">&quot;pressed&quot;</span><span class="op">,</span> <span class="st">&quot;some_data&quot;</span><span class="op">,</span> <span class="dv">123</span>)<span class="op">;</span></span>
+<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-55"><a href="#cb2-55" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb2-56"><a href="#cb2-56" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-57"><a href="#cb2-57" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> button <span class="op">=</span> <span class="kw">new</span> <span class="fu">MyButton</span>()<span class="op">;</span></span>
+<span id="cb2-58"><a href="#cb2-58" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-59"><a href="#cb2-59" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> player <span class="op">=</span> {</span>
+<span id="cb2-60"><a href="#cb2-60" aria-hidden="true" tabindex="-1"></a>  <span class="dt">onPressed</span><span class="op">:</span> (data<span class="op">,</span> number) <span class="kw">=&gt;</span> {</span>
+<span id="cb2-61"><a href="#cb2-61" aria-hidden="true" tabindex="-1"></a>    <span class="bu">console</span><span class="op">.</span><span class="fu">log</span>(<span class="vs">`Player received &#39;pressed&#39; signal with: </span><span class="sc">${</span>data<span class="sc">}</span><span class="vs">, </span><span class="sc">${</span>number<span class="sc">}</span><span class="vs">`</span>)<span class="op">;</span></span>
+<span id="cb2-62"><a href="#cb2-62" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb2-63"><a href="#cb2-63" aria-hidden="true" tabindex="-1"></a>}<span class="op">;</span></span>
+<span id="cb2-64"><a href="#cb2-64" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-65"><a href="#cb2-65" aria-hidden="true" tabindex="-1"></a><span class="co">// Connect (`on` is the equivalent of `connect`)</span></span>
+<span id="cb2-66"><a href="#cb2-66" aria-hidden="true" tabindex="-1"></a>button<span class="op">.</span><span class="fu">on</span>(<span class="st">&quot;pressed&quot;</span><span class="op">,</span> player<span class="op">.</span><span class="at">onPressed</span>)<span class="op">;</span></span>
+<span id="cb2-67"><a href="#cb2-67" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-68"><a href="#cb2-68" aria-hidden="true" tabindex="-1"></a><span class="co">// Emit the signal</span></span>
+<span id="cb2-69"><a href="#cb2-69" aria-hidden="true" tabindex="-1"></a>button<span class="op">.</span><span class="fu">press</span>()<span class="op">;</span></span></code></pre></div>
+<p>This <code>EventEmitter</code> approach provides a clean,
+self-contained, and highly reusable way to implement the powerful
+decoupling pattern that Signals provide in Godot.</p>
